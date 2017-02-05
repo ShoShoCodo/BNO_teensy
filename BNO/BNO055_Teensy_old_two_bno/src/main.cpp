@@ -15,6 +15,10 @@ modified:11_29_16
  SDA and SCL should have external pull-up resistors (to 3.3V).
  47k resistors are on the BNO055 breakout board.
 
+
+ **** not pin definitions are stored in modes.h
+***like myled and whatnot
+
  Hardware setup:
  Breakout Board --------- Teensy 3.6
  3V3 ---------------------- 3.3V
@@ -26,6 +30,10 @@ modified:11_29_16
  data is collected in the form
  ax1,ay1,az1,ax2,ay2,az2,gx1,gy1,gz1,gx2,gy2,gz2,mx1,my1,mz1,mx2,my2,mz2
  where 1 and 2 are the two different BNOs connected
+
+ ***must space out the analog pins so they dont get interferrence
+ 0,2,6,7
+
  Note:
  We have disabled the internal pull-ups used by the Wire library in the Wire.h/twi.c utility file.
  We are also using the 400 kHz fast I2C mode by setting the TWI_FREQ  to 400000L /twi.h utility file.
@@ -47,11 +55,21 @@ modified:11_29_16
 #include <wchar.h>
 #include "ff.h"
 #include "clocks.h"
-#define ACC_BUFFSIZE 3*1000
-#define GYR_BUFFSIZE 3*1000
-#define MAG_BUFFSIZE 3*1000
-#define Pressure_BUFFSIZE 4*1000
-#define NUMSAMPLES 1000
+
+
+#define NUMSAMPLES_BNO 60
+#define ACC_BUFFSIZE 3*NUMSAMPLES_BNO
+#define GYR_BUFFSIZE 3*NUMSAMPLES_BNO
+#define MAG_BUFFSIZE 3*NUMSAMPLES_BNO
+
+#define NUMSAMPLES_Pressure 1000 // Actual_number_of_samples_from_EACH_sensor we
+                            // multiple the index and whatnot by the number of samples later
+//Storage buffer (4* because they are float 32 in size )
+#define Pressure_BUFFSIZE NUMSAMPLES_Pressure*8 //want 100 from each of the 4 sensors or 50 from 8
+#define BUFFSIZE 4*Pressure_BUFFSIZE //because its uint32 so its broken down into 4 uint8_ts
+#define NUMSAMPLE_8Pressure NUMSAMPLES_Pressure*8 //needs the you since all 8 sensors are incrementing it
+uint8_t buffer[BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
+
 
 float32_t outputbuff[ACC_BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
 float32_t acc_raw_buff[ACC_BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
@@ -75,25 +93,40 @@ DIR dir;        /* Directory object */
 FILINFO fno;      /* File information object */
 UINT wr;
 
-//Storage buffer (4* because they are float 32 in size )
-#define BUFFSIZE 4*ACC_BUFFSIZE+4*GYR_BUFFSIZE+4*MAG_BUFFSIZE+4*Pressure_BUFFSIZE
-uint8_t buffer[BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
+
+#define BUFFSIZE_big 4*ACC_BUFFSIZE+4*GYR_BUFFSIZE+4*MAG_BUFFSIZE+4*Pressure_BUFFSIZE
+uint8_t buffer_big[BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
 
 // ***** Sensor Sampling Stuff ***** //
 ADC *adc = new ADC(); // adc object
-const int P1_PIN = A0;
-const int P2_PIN = A1;
-const int P3_PIN = A2;
-const int P4_PIN = A3;
+const int P11_PIN = A0;// only A0-A14 are declares in header
+const int P12_PIN = A1;//
+const int P13_PIN = A2;//
+const int P14_PIN = A3;//
+
+const int P21_PIN = A6;
+const int P22_PIN = A7;
+const int P23_PIN = A8;
+const int P24_PIN = A9;
+
+const float scaler = 2.56/4095;
+const float biasScaler = 0.6;
+int biasP1=0;
+int biasP2=0;
+int biasP3=0;
+int biasP4=0;
 
 // Timer Control
 const float scale_timer = 15.98;
-const uint32_t TIMER_TS = (uint32_t)(1000000/250.0/scale_timer); // Sampling Period in Microseconds
+const uint32_t TIMER_TS =   (uint32_t)(1000000/250.0/scale_timer);  // 150000 = 0.15s
+                                    //  1s/((X)/scale_timer)  where X= samples per sec    // Sampling Period in Microseconds
+
 // ISR Flags
 volatile bool a_flag = 0;
 volatile bool g_flag = 0;
 volatile bool m_flag = 0;
 volatile bool p_flag = 0;
+uint p_scaler =0;
 //===================================================================================================================
 //====== Set of useful function to access acceleration. gyroscope, magnetometer, and temperature data
 //===================================================================================================================
@@ -318,12 +351,6 @@ void accelgyroCalBNO055(float * dest1, float * dest2)
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_LSB, (int16_t)accel_bias[2] & 0xFF);
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_MSB, ((int16_t)accel_bias[2] >> 8) & 0xFF);
 
-  // Check that offsets were properly written to offset registers
-//  Serial.println("Average accelerometer bias = ");
-//  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_LSB)));
-//  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Y_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Y_LSB)));
-//  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_Z_LSB)));
-
    //write biases to gyro offset registers
   writeByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_X_LSB, (int16_t)gyro_bias[0] & 0xFF);
   writeByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_X_MSB, ((int16_t)gyro_bias[0] >> 8) & 0xFF);
@@ -334,13 +361,6 @@ void accelgyroCalBNO055(float * dest1, float * dest2)
 
   // Select BNO055 system operation mode
   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, OPRMode );
-
- // Check that offsets were properly written to offset registers
-//  Serial.println("Average gyro bias = ");
-//  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_X_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_X_LSB)));
-//  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Y_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Y_LSB)));
-//  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Z_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_GYR_OFFSET_Z_LSB)));
-
    Serial.println("Accel/Gyro Calibration done!");
 }
 
@@ -381,10 +401,6 @@ void magCalBNO055(float * dest1)
     delay(105);  // at 10 Hz ODR, new mag data is available every 100 ms
    }
 
- //   Serial.println("mag x min/max:"); Serial.println(mag_max[0]); Serial.println(mag_min[0]);
- //   Serial.println("mag y min/max:"); Serial.println(mag_max[1]); Serial.println(mag_min[1]);
- //   Serial.println("mag z min/max:"); Serial.println(mag_max[2]); Serial.println(mag_min[2]);
-
     mag_bias[0]  = (mag_max[0] + mag_min[0])/2;  // get average x mag bias in counts
     mag_bias[1]  = (mag_max[1] + mag_min[1])/2;  // get average y mag bias in counts
     mag_bias[2]  = (mag_max[2] + mag_min[2])/2;  // get average z mag bias in counts
@@ -406,11 +422,6 @@ void magCalBNO055(float * dest1)
   writeByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_Z_LSB, (int16_t)mag_bias[2] & 0xFF);
   writeByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_Z_MSB, ((int16_t)mag_bias[2] >> 8) & 0xFF);
 
-  // Check that offsets were properly written to offset registers
-//  Serial.println("Average magnetometer bias = ");
-//  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_X_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_X_LSB)));
-//  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_Y_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_Y_LSB)));
-//  Serial.println((int16_t)((int16_t)readByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_Z_MSB) << 8 | readByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_Z_LSB)));
   // Select BNO055 system operation mode
   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, OPRMode );
 
@@ -563,108 +574,26 @@ void Madgwick(float ax, float ay, float az, float gx, float gy, float gz, float 
 
         }
 
-//this is where the mahony function was before moving it
-void Mahony(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz)
-  {
-      float q1 = q[0], q2 = q[1], q3 = q[2], q4 = q[3];   // short name local variable for readability
-      float norm;
-      float hx, hy, bx, bz;
-      float vx, vy, vz, wx, wy, wz;
-      float ex, ey, ez;
-      float pa, pb, pc;
-
-      // Auxiliary variables to avoid repeated arithmetic
-      float q1q1 = q1 * q1;
-      float q1q2 = q1 * q2;
-      float q1q3 = q1 * q3;
-      float q1q4 = q1 * q4;
-      float q2q2 = q2 * q2;
-      float q2q3 = q2 * q3;
-      float q2q4 = q2 * q4;
-      float q3q3 = q3 * q3;
-      float q3q4 = q3 * q4;
-      float q4q4 = q4 * q4;
-
-      // Normalise accelerometer measurement
-      norm = sqrt(ax * ax + ay * ay + az * az);
-      if (norm == 0.0f) return; // handle NaN
-      norm = 1.0f / norm;        // use reciprocal for division
-      ax *= norm;
-      ay *= norm;
-      az *= norm;
-
-      // Normalise magnetometer measurement
-      norm = sqrt(mx * mx + my * my + mz * mz);
-      if (norm == 0.0f) return; // handle NaN
-      norm = 1.0f / norm;        // use reciprocal for division
-      mx *= norm;
-      my *= norm;
-      mz *= norm;
-
-      // Reference direction of Earth's magnetic field
-      hx = 2.0f * mx * (0.5f - q3q3 - q4q4) + 2.0f * my * (q2q3 - q1q4) + 2.0f * mz * (q2q4 + q1q3);
-      hy = 2.0f * mx * (q2q3 + q1q4) + 2.0f * my * (0.5f - q2q2 - q4q4) + 2.0f * mz * (q3q4 - q1q2);
-      bx = sqrt((hx * hx) + (hy * hy));
-      bz = 2.0f * mx * (q2q4 - q1q3) + 2.0f * my * (q3q4 + q1q2) + 2.0f * mz * (0.5f - q2q2 - q3q3);
-
-      // Estimated direction of gravity and magnetic field
-      vx = 2.0f * (q2q4 - q1q3);
-      vy = 2.0f * (q1q2 + q3q4);
-      vz = q1q1 - q2q2 - q3q3 + q4q4;
-      wx = 2.0f * bx * (0.5f - q3q3 - q4q4) + 2.0f * bz * (q2q4 - q1q3);
-      wy = 2.0f * bx * (q2q3 - q1q4) + 2.0f * bz * (q1q2 + q3q4);
-      wz = 2.0f * bx * (q1q3 + q2q4) + 2.0f * bz * (0.5f - q2q2 - q3q3);
-
-      // Error is cross product between estimated direction and measured direction of gravity
-      ex = (ay * vz - az * vy) + (my * wz - mz * wy);
-      ey = (az * vx - ax * vz) + (mz * wx - mx * wz);
-      ez = (ax * vy - ay * vx) + (mx * wy - my * wx);
-      if (Ki > 0.0f)
-      {
-          eInt[0] += ex;      // accumulate integral error
-          eInt[1] += ey;
-          eInt[2] += ez;
-      }
-      else
-      {
-          eInt[0] = 0.0f;     // prevent integral wind up
-          eInt[1] = 0.0f;
-          eInt[2] = 0.0f;
-      }
-
-      // Apply feedback terms
-      gx = gx + Kp * ex + Ki * eInt[0];
-      gy = gy + Kp * ey + Ki * eInt[1];
-      gz = gz + Kp * ez + Ki * eInt[2];
-
-      // Integrate rate of change of quaternion
-      pa = q2;
-      pb = q3;
-      pc = q4;
-      q1 = q1 + (-q2 * gx - q3 * gy - q4 * gz) * (0.5f * deltat);
-      q2 = pa + (q1 * gx + pb * gz - pc * gy) * (0.5f * deltat);
-      q3 = pb + (q1 * gy - pa * gz + pc * gx) * (0.5f * deltat);
-      q4 = pc + (q1 * gz + pa * gy - pb * gx) * (0.5f * deltat);
-
-      // Normalise quaternion
-      norm = sqrt(q1 * q1 + q2 * q2 + q3 * q3 + q4 * q4);
-      norm = 1.0f / norm;
-      q[0] = q1 * norm;
-      q[1] = q2 * norm;
-      q[2] = q3 * norm;
-      q[3] = q4 * norm;
-
-  }
-
   //===================================================================================================================
   //====== Timer interrupt service routine
   //===================================================================================================================
 
 void TIMER_TS_ISR(void) {
+  //digitalWrite(myLed, !digitalRead(myLed));
+
     a_flag = true;
     g_flag = true;
     m_flag = true;
+    p_scaler = p_scaler++;
+
+    if (p_scaler == 100){ // the pressure are sampled 100th as often as the pressure sensors
+      digitalWrite(myLed, !digitalRead(myLed));
+        p_scaler=0;
     p_flag = true;
+  } else
+  {
+    p_flag=false;
+  }
     //write pins out here to check that the time is actually what we want
 }
 
@@ -674,7 +603,8 @@ void TIMER_TS_ISR(void) {
 
 void setup()
 {
-    f_mount(&fatfs, (TCHAR*)_T("/"), 0); /* Mount/Unmount a logical drive */
+
+f_mount(&fatfs, (TCHAR*)_T("/"), 0); /* Mount/Unmount a logical drive sd*/
 
   // Setup for Master mode, pins 16/17, external pullups, 400kHz for Teensy 3.1
   Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_EXT, I2C_RATE_400);
@@ -694,12 +624,16 @@ void setup()
   pinMode(BNO2, OUTPUT);
   digitalWrite(BNO1, HIGH);
   digitalWrite(BNO2, LOW);
+
   pinMode(myLed, OUTPUT);
   digitalWrite(myLed, HIGH);
   rc = f_open(&fil, (TCHAR*)_T("BNO_test.bin"), FA_WRITE | FA_CREATE_ALWAYS);
   rc = f_close(&fil);
+
     Timer3.initialize(TIMER_TS);
     Timer3.attachInterrupt(TIMER_TS_ISR);
+
+
 for (int BNOcali_count=1;BNOcali_count <= 2;BNOcali_count++)
 {
   I2Cscan(); // check for I2C devices on the bus8
@@ -748,28 +682,28 @@ for (int BNOcali_count=1;BNOcali_count <= 2;BNOcali_count++)
     Serial.println("BNO055 is online...");
 
     // Check self-test results
-    byte selftest = readByte(BNO055_ADDRESS, BNO055_ST_RESULT);
-
-    if(selftest & 0x01) {
-      Serial.println("accelerometer passed selftest");
-    } else {
-      Serial.println("accelerometer failed selftest");
-    }
-    if(selftest & 0x02) {
-      Serial.println("magnetometer passed selftest");
-    } else {
-      Serial.println("magnetometer failed selftest");
-    }
-    if(selftest & 0x04) {
-      Serial.println("gyroscope passed selftest");
-    } else {
-      Serial.println("gyroscope failed selftest");
-    }
-    if(selftest & 0x08) {
-      Serial.println("MCU passed selftest");
-    } else {
-      Serial.println("MCU failed selftest");
-    }
+    // byte selftest = readByte(BNO055_ADDRESS, BNO055_ST_RESULT);
+    //
+    // if(selftest & 0x01) {
+    //   Serial.println("accelerometer passed selftest");
+    // } else {
+    //   Serial.println("accelerometer failed selftest");
+    // }
+    // if(selftest & 0x02) {
+    //   Serial.println("magnetometer passed selftest");
+    // } else {
+    //   Serial.println("magnetometer failed selftest");
+    // }
+    // if(selftest & 0x04) {
+    //   Serial.println("gyroscope passed selftest");
+    // } else {
+    //   Serial.println("gyroscope failed selftest");
+    // }
+    // if(selftest & 0x08) {
+    //   Serial.println("MCU passed selftest");
+    // } else {
+    //   Serial.println("MCU failed selftest");
+    // }
 
 
 //implement calibration
@@ -797,19 +731,19 @@ for (int BNOcali_count=1;BNOcali_count <= 2;BNOcali_count++)
   // delay(100);
 
   // Check calibration status of the sensors
-  uint8_t calstat = readByte(BNO055_ADDRESS, BNO055_CALIB_STAT);
-  Serial.println("Not calibrated = 0, fully calibrated = 3");
-  Serial.print("System calibration status ");
-  Serial.println( (0xC0 & calstat) >> 6);
-  Serial.print("Gyro   calibration status ");
-  Serial.println( (0x30 & calstat) >> 4);
-  Serial.print("Accel  calibration status ");
-  Serial.println( (0x0C & calstat) >> 2);
-  Serial.print("Mag    calibration status ");
-  Serial.println( (0x03 & calstat) >> 0);
+  // uint8_t calstat = readByte(BNO055_ADDRESS, BNO055_CALIB_STAT);
+  // Serial.println("Not calibrated = 0, fully calibrated = 3");
+  // Serial.print("System calibration status ");
+  // Serial.println( (0xC0 & calstat) >> 6);
+  // Serial.print("Gyro   calibration status ");
+  // Serial.println( (0x30 & calstat) >> 4);
+  // Serial.print("Accel  calibration status ");
+  // Serial.println( (0x0C & calstat) >> 2);
+  // Serial.print("Mag    calibration status ");
+  // Serial.println( (0x03 & calstat) >> 0);
 
   initBNO055(); // Initialize the BNO055
-  Serial.println("BNO055 initialized for sensor mode...."); // Initialize BNO055 for sensor read
+//  Serial.println("BNO055 initialized for sensor mode...."); // Initialize BNO055 for sensor read
 
   }
   else
@@ -823,8 +757,10 @@ for (int BNOcali_count=1;BNOcali_count <= 2;BNOcali_count++)
   digitalWrite(BNO2, !digitalRead(BNO2));
   delay(500); //toggles the addresses of the BNOs to calibrate the second
 
-}
-   //ends the for loop to calibrate both sensors
+} //ends the for loop to calibrate both sensors
+
+
+
 }
 
 
@@ -835,8 +771,16 @@ void loop()
 {
  while(true){
 
+
+     // to read a variable which the interrupt code writes, we
+     // must temporarily disable interrupts, to be sure it will
+     // not change while we are reading.  To minimize the time
+     // with interrupts off, just quickly make a copy, and then
+     // use the copy while allowing the interrupt to keep working.
+
   noInterrupts();
 if (a_flag){
+  a_flag=false;
     readAccelData(accelCount);//, acc_buff);  // Read the x/y/z adc values
     // Now we'll calculate the accleration value into actual mg's
     ax = (float)accelCount[0]; // - accelBias[0];  // subtract off calculated accel bias
@@ -863,6 +807,7 @@ if (a_flag){
             }
 
    if (g_flag){
+     g_flag=false;
     readGyroData(gyroCount);//, gyr_raw_buff);  // Read the x/y/z adc values
     // Calculate the gyro value into actual degrees per second
     gx = (float)gyroCount[0]/16.; // - gyroBias[0];  // subtract off calculated gyro bias
@@ -888,7 +833,8 @@ if (a_flag){
             gyr_buff_idx += 6;
 
             }
-            if (m_flag){
+  if (m_flag){
+              m_flag=false;
     readMagData(magCount);//, mag_raw_buff);  // Read the x/y/z adc values
     // Calculate the magnetometer values in milliGauss
     mx = (float)magCount[0]/1.6; // - magBias[0];  // get actual magnetometer value in mGauss
@@ -914,34 +860,68 @@ if (a_flag){
             mag_buff_idx += 6;
             }
 if(p_flag){
-Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P1_PIN));
-Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P2_PIN));
-Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P3_PIN));
-Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P4_PIN));
- // Serial.print("analog 1 is: ");
- // Serial.println(Pressure_buff[Pressure_buff_idx-4]);
- //   Serial.print("analog 2 is: ");
- // Serial.println(Pressure_buff[Pressure_buff_idx-3]);
- //   Serial.print("analog 3 is: ");
- // Serial.println(Pressure_buff[Pressure_buff_idx-2]);
- //   Serial.print("analog 4 is: ");
- // Serial.println(Pressure_buff[Pressure_buff_idx-1]);
-// delay(550);
+  p_flag=false;
+  Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P11_PIN));//-biasP1);
+  Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P12_PIN)-biasP2);
+  Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P13_PIN)-biasP3);
+  Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P14_PIN)-biasP4);
+
+  Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P21_PIN));//-biasP1);
+  Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P22_PIN)-biasP2);
+  Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P23_PIN)-biasP3);
+  Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P24_PIN)-biasP4);
+Serial.println(Pressure_buff_idx);
+
+      if(SerialDebug_analog) {
+        Serial.print("analog 1 in volts is: ");
+      //note the addition of the scaler and the reprinting of analog 1
+        Serial.println(Pressure_buff[Pressure_buff_idx-4]*scaler);
+           Serial.print("analog 1 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-4]);
+          Serial.print("analog 2 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-3]);
+          Serial.print("analog 3 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-2]);
+          Serial.print("analog 4 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-1]);
+        Serial.println(Pressure_buff_idx);
+
+        Serial.print("analog 5 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-8]);
+          Serial.print("analog 6 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-7]);
+          Serial.print("analog 7 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-6]);
+          Serial.print("analog 8 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-5]);
+        Serial.println(Pressure_buff_idx);
+          }// delay(550);
 }
-/*store the data to the SD card if the timer is up*/
-        if (acc_buff_idx%NUMSAMPLES == 0) {
+//===================================================================================================================
+//====== /*store the data to the SD card if the timer is up*/
+//===================================================================================================================
+
+        if (Pressure_buff_idx%NUMSAMPLE_8Pressure == 0) {
               acc_buff_idx = 0;
               gyr_buff_idx = 0;
               mag_buff_idx = 0;
-              Pressure_buff_idx = 0;
-             rc = f_open(&fil, (TCHAR*)_T("BNO_test.bin"), FA_WRITE | FA_OPEN_EXISTING);
+            //  Pressure_buff_idx = 0;
+            //  rc = f_open(&fil, (TCHAR*)_T("BNO_test.bin"), FA_WRITE | FA_OPEN_EXISTING);
+            // //rc = f_open(&fil, wfname, FA_WRITE | FA_OPEN_EXISTING);
+            // rc = f_lseek(&fil, f_size(&fil));
+            //
+            // memcpy(buffer, (uint8_t*)acc_buff, 4*ACC_BUFFSIZE);
+            // memcpy(buffer+4*ACC_BUFFSIZE, (uint8_t*)gyr_buff, 4*GYR_BUFFSIZE);
+            // memcpy(buffer+4*ACC_BUFFSIZE+4*GYR_BUFFSIZE, (uint8_t*)mag_buff, 4*MAG_BUFFSIZE);
+            // memcpy(buffer+4*ACC_BUFFSIZE+4*GYR_BUFFSIZE, (uint8_t*)Pressure_buff, 4*Pressure_BUFFSIZE);
+            // rc = f_write(&fil, buffer, BUFFSIZE, &wr);
+            // rc = f_close(&fil);
+
+            Pressure_buff_idx=0;
+            rc = f_open(&fil, (TCHAR*)_T("Pressure_test.bin"), FA_WRITE | FA_OPEN_EXISTING);
             //rc = f_open(&fil, wfname, FA_WRITE | FA_OPEN_EXISTING);
             rc = f_lseek(&fil, f_size(&fil));
-
-            memcpy(buffer, (uint8_t*)acc_buff, 4*ACC_BUFFSIZE);
-            memcpy(buffer+4*ACC_BUFFSIZE, (uint8_t*)gyr_buff, 4*GYR_BUFFSIZE);
-            memcpy(buffer+4*ACC_BUFFSIZE+4*GYR_BUFFSIZE, (uint8_t*)mag_buff, 4*MAG_BUFFSIZE);
-            memcpy(buffer+4*ACC_BUFFSIZE+4*GYR_BUFFSIZE, (uint8_t*)Pressure_buff, 4*Pressure_BUFFSIZE);
+            memcpy(buffer, (uint8_t*)Pressure_buff, 4*Pressure_BUFFSIZE);
             rc = f_write(&fil, buffer, BUFFSIZE, &wr);
             rc = f_close(&fil);
 
@@ -1071,7 +1051,7 @@ Madgwick(ax, ay, az, gx*PI/180.0f, gy*PI/180.0f, gz*PI/180.0f,  mx,  my,  mz);
     Serial.print("rate = "); Serial.print((float)sumCount/sum, 2); Serial.println(" Hz");
     //}
 
-    digitalWrite(myLed, !digitalRead(myLed));
+    //digitalWrite(myLed, !digitalRead(myLed));
     count = millis();
     sumCount = 0;
     sum = 0;

@@ -2,43 +2,43 @@
 %parser for 2 BNO configuration with TEENSY 3.6 
 % This program parses log files and plots the sensor data.
 
-tic;
-clc;
-clear;
-close all;
-
-% How many samples per sensor per block
-k=1;%start of file
-pointer=0;
-MAG_BLOCKSIZE = 3*1000;
-GYR_BLOCKSIZE = 3*1000;
-ACC_BLOCKSIZE = 3*1000;
-BLOCKSIZE = 4*MAG_BLOCKSIZE+4*GYR_BLOCKSIZE ...
-    + 4*ACC_BLOCKSIZE;
+% tic;
+% clc;
+% clear;
+% close all;
+% 
+% % How many samples per sensor per block
+% k=1;%start of file
+% pointer=0;
+% MAG_BLOCKSIZE = 3*1000;
+% GYR_BLOCKSIZE = 3*1000;
+% ACC_BLOCKSIZE = 3*1000;
+% BLOCKSIZE = 4*MAG_BLOCKSIZE+4*GYR_BLOCKSIZE ...
+%     + 4*ACC_BLOCKSIZE;
 
 % Open the log file
-[Name, pathName] = uigetfile('*.bin', 'Select Log File');% selects the folder to pull data from 
-BaseName='BNO_test';
-%EndFileName='_raw.bin'; % picks which file you will use 
-EndFileName='.bin';
-ShortEndName = EndFileName(1:end-4);
-%mkdir(pathName,'figures')
-fileName=[BaseName,num2str(k),EndFileName]
-savelocation=[pathName,'figures',num2str(k)]
+% [Name, pathName] = uigetfile('*.bin', 'Select Log File');% selects the folder to pull data from 
+% BaseName='BNO_test';
+% %EndFileName='_raw.bin'; % picks which file you will use 
+% EndFileName='.bin';
+% ShortEndName = EndFileName(1:end-4);
+% %mkdir(pathName,'figures')
+% fileName=[BaseName,num2str(k),EndFileName]
+% savelocation=[pathName,'figures',num2str(k)]
 
-while(fileName)
-fileID = fopen([pathName, fileName]);
-rawData = fread(fileID, 'uint8');
+% while(fileName)
+% fileID = fopen([pathName, fileName]);
+% rawData = fread(fileID, 'uint8');
 numBlocks = floor(length(rawData)/BLOCKSIZE); % Only process whole blocks
 
 if(numBlocks)
 % Pre-allocate buffers
-MAGData = zeros(1, MAG_BLOCKSIZE*numBlocks);
-GYRData = zeros(1, GYR_BLOCKSIZE*numBlocks);
-ACCData = zeros(1, ACC_BLOCKSIZE*numBlocks);
+MAGData = zeros(1, MAG_BLOCKSIZE*(numBlocks-2701));
+GYRData = zeros(1, GYR_BLOCKSIZE*(numBlocks-2701));
+ACCData = zeros(1, ACC_BLOCKSIZE*(numBlocks-2701));
 
 % Parse the raw data
-for n = 0:numBlocks-1
+for n = 0:numBlocks-2700
     % Parse MAG Data: 4 bytes -> float
     for i=1:MAG_BLOCKSIZE     
         Datatemp3=rawData(i*4-3+(BLOCKSIZE*n));
@@ -88,9 +88,9 @@ pointer=4*MAG_BLOCKSIZE;
     pointer=4*MAG_BLOCKSIZE+4*GYR_BLOCKSIZE+4*ACC_BLOCKSIZE;
 end
 %emgshort = emgData(1:15000);
-MAGData = reshape(MAGData,3,[]);
-GYRData = reshape(GYRData,3,[]);
-ACCData = reshape(ACCData,3,[]);
+MAGData = reshape(MAGData,6,[]);
+GYRData = reshape(GYRData,6,[]);
+ACCData = reshape(ACCData,6,[]);
 mx=ACCData(1,:);
 my=ACCData(2,:);
 mz=ACCData(3,:);
@@ -101,14 +101,14 @@ t = 0:1/fs:(length(MAGData)-1)/fs;
 
 t_ACCel = 0:1/fs:(length(ACCData)-1)/fs;
 
-mkdir(savelocation)% make the individual directory for each test batch
+%mkdir(savelocation)% make the individual directory for each test batch
 % Plot MAG Data
 E=figure('Name', 'MAG Data');%,'visible','off')
 plot(t, MAGData);
 title('MAG Data')
 xlabel('Time (s)')
 ylabel('mag Y axis')
-saveas(E,[pathName,'\figures',num2str(k),'\','MAG',ShortEndName],'fig')
+%saveas(E,[pathName,'\figures',num2str(k),'\','MAG',ShortEndName],'fig')
 
 % Plot GYR Data
 M=figure('Name', 'GYR Data');%,'visible','off')
@@ -116,7 +116,7 @@ plot(t, GYRData);
 title('GYR Data')
 xlabel('Time (s)')
 ylabel('GYR y axis ')
-saveas(M,[pathName,'\figures',num2str(k),'\','GYR',ShortEndName],'fig')
+%saveas(M,[pathName,'\figures',num2str(k),'\','GYR',ShortEndName],'fig')
 
 %*********Plot MAGelerometer Data*******%
 
@@ -145,16 +145,16 @@ axis([0,max(t_ACCel),minAccel_scale,maxAccel_scale+1])
 title('ACCelerometer z-axis')
 xlabel('Time (s)')
 ylabel('g')
-saveas(A,[pathName,'\figures',num2str(k),'\','ALL Axis Motion ',ShortEndName],'fig')
+%saveas(A,[pathName,'\figures',num2str(k),'\','ALL Axis Motion ',ShortEndName],'fig')
 
 end % ends if for empty file and increments to the next 
 %close all;
 %clear flagData spo2Data emgData
-    k=k+1;
-  fileName=[BaseName,num2str(k),EndFileName]
-  savelocation=[pathName,'figures',num2str(k)]
+%     k=k+1;
+%   fileName=[BaseName,num2str(k),EndFileName]
+%   savelocation=[pathName,'figures',num2str(k)]
   
  toc
-end
+% end
 
 

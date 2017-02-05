@@ -1,3 +1,5 @@
+#include "ff.h"
+
 // Set initial input parameters
 enum Ascale {  // ACC Full Scale
   AFS_2G = 0,
@@ -11,17 +13,17 @@ enum Abw { // ACC Bandwidth
   ABW_15_63Hz,
   ABW_31_25Hz,
   ABW_62_5Hz,
-  ABW_125Hz,    
+  ABW_125Hz,
   ABW_250Hz,
-  ABW_500Hz,     
+  ABW_500Hz,
   ABW_1000Hz,    //0x07
 };
 
 enum APwrMode { // ACC Pwr Mode
-  NormalA = 0,  
+  NormalA = 0,
   SuspendA,
   LowPower1A,
-  StandbyA,        
+  StandbyA,
   LowPower2A,
   DeepSuspendA
 };
@@ -72,20 +74,20 @@ enum OPRMode {  // BNO-55 operation modes
 };
 
 enum PWRMode {
-  Normalpwr = 0,   
-  Lowpower,       
-  Suspendpwr       
+  Normalpwr = 0,
+  Lowpower,
+  Suspendpwr
 };
 
-enum Modr {         // magnetometer output data rate  
-  MODR_2Hz = 0,     
+enum Modr {         // magnetometer output data rate
+  MODR_2Hz = 0,
   MODR_6Hz,
   MODR_8Hz,
-  MODR_10Hz,  
+  MODR_10Hz,
   MODR_15Hz,
   MODR_20Hz,
-  MODR_25Hz, 
-  MODR_30Hz 
+  MODR_25Hz,
+  MODR_30Hz
 };
 
 enum MOpMode { // MAG Op Mode
@@ -96,10 +98,10 @@ enum MOpMode { // MAG Op Mode
 };
 
 enum MPwrMode { // MAG power mode
-  Normal = 0,   
-  Sleep,     
+  Normal = 0,
+  Sleep,
   Suspend,
-  ForceMode  
+  ForceMode
 };
 
 
@@ -123,11 +125,14 @@ uint8_t PWRMode = Normalpwr ;    // Select BNO055 power mode
 uint8_t OPRMode = NDOF;       // specify operation mode for sensors
 uint8_t status;               // BNO055 data status register
 float aRes, gRes, mRes;       // scale resolutions per LSB for the sensors
-  
+
 // *****Pin definitions
 int intPin = 8;  // These can be changed, 2 and 3 are the Arduinos ext int pins
-int BNO1 = 23; 
-int BNO2 = 22; 
+/*these are used to toggle the address
+                of the BNO to easily toggle between BNOS
+                */
+int BNO1 = 11;
+int BNO2 = 12;
 int myLed = 13;
 
 uint16_t Pcal[8];         // calibration constants from MS5637 PROM registers
@@ -171,5 +176,5 @@ float sum = 0.0f;          // integration interval for both filter schemes
 uint32_t lastUpdate = 0, firstUpdate = 0; // used to calculate integration interval
 uint32_t Now = 0;                         // used to calculate integration interval
 
-float ax, ay, az, gx, gy, gz, mx, my, mz; // variables to hold latest sensor data values 
+float ax, ay, az, gx, gy, gz, mx, my, mz; // variables to hold latest sensor data values
 float ax2, ay2, az2, gx2, gy2, gz2, mx2, my2, mz2;

@@ -127,4 +127,6 @@
 #define BNO055_ADDRESS 0x28   //  Device address of BNO055 when ADO = 0
 #endif
 
-#define SerialDebug false      // set to true to get Serial output for debugging
+#define SerialDebug false      // set to true to get Serial output for debugging for accel gyro and mag
+#define SerialDebug_analog true      // set to true to get Serial output for debugging
+#define Serial_fusion false
