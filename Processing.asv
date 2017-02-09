@@ -41,7 +41,7 @@ GYRData = zeros(1, GYR_BLOCKSIZE*(numBlocks-2701));
 ACCData = zeros(1, ACC_BLOCKSIZE*(numBlocks-2701));
 
 % Parse the raw data
-for n = 0:numBlocks-400
+for n = 0:numBlocks %-2700
     % Parse MAG Data: 4 bytes -> float
     for i=1:MAG_BLOCKSIZE     
         Datatemp3=rawData(i*4-3+(BLOCKSIZE*n));
@@ -105,9 +105,9 @@ t = 0:1/fs:(length(MAGData)-1)/fs;
 t_ACCel = 0:1/fs:(length(ACCData)-1)/fs;
 
 %mkdir(savelocation)% make the individual directory
-% 
-% =
-% ===============xzfor each test batch
+
+=
+===============xzfor each test batch
 % Plot MAG Data
 E=figure('Name', 'MAG Data');%,'visible','off')
 plot(t, MAGData);

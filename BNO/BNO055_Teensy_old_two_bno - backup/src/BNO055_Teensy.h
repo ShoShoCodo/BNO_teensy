@@ -128,7 +128,7 @@
 #endif
 
 #define SerialDebug false      // set to true to get Serial output for debugging for accel gyro and mag
-#define SerialDebug_analog true     // set to true to get Serial output for debugging
+#define SerialDebug_analog false      // set to true to get Serial output for debugging
 #define Serial_fusion false
 #define Save_to_SD true
 #define Serial_Stream false

@@ -1,14 +1,4 @@
-/* Analog Input Example, Teensyduino Tutorial #4
-   http://www.pjrc.com/teensy/tutorial4.html
-
-   After uploading this to your board, use Serial Monitor
-   to view the message.  When Serial is selected from the
-   Tools > USB Type menu, the correct serial port must be
-   selected from the Tools > Serial Port AFTER Teensy is
-   running this code.  Teensy only becomes a serial device
-   while this code is running!  For non-Serial types,
-   the Serial port is emulated, so no port needs to be
-   selected.
+/* Analog Input 
 
    This example code is in the public domain.
 */
@@ -48,6 +38,7 @@ const int P21_PIN = A6;
 const int P22_PIN = A7;
 const int P23_PIN = A8;
 const int P24_PIN = A9;
+int myLed = 13;
 
 
 const float scaler = 2.56/4095;
@@ -59,7 +50,9 @@ int biasP4=0;
 
 void setup()
 {            
-
+pinMode(myLed, OUTPUT);
+digitalWrite(myLed, HIGH);
+  
   f_mount(&fatfs, (TCHAR*)_T("/"), 0); /* Mount/Unmount a logical drive */
   rc = f_open(&fil, (TCHAR*)_T("Pressure_test.bin"), FA_WRITE | FA_CREATE_ALWAYS);
   rc = f_close(&fil);
@@ -111,7 +104,9 @@ void loop()
     Serial.print("analog 4 is: ");
   Serial.println(Pressure_buff[Pressure_buff_idx-5]);
   Serial.println(Pressure_buff_idx);
-  delay(550);
+  digitalWrite(myLed, !digitalRead(myLed));
+  
+  delay(10);//delay in ms
 //if (Pressure_buff_idx<5)
 //{
 //biasP1=Pressure_buff[Pressure_buff_idx-4]*biasScaler;
@@ -120,13 +115,14 @@ void loop()
 //biasP4=Pressure_buff[Pressure_buff_idx-1]*biasScaler; 
 //delay(2050);
 //}
+
 if (Pressure_buff_idx==400)
 {
 biasP1=0;
 biasP2=0;
 biasP3=0;
 biasP4=0;
-  
+ 
             Pressure_buff_idx=0;
             rc = f_open(&fil, (TCHAR*)_T("Pressure_test.bin"), FA_WRITE | FA_OPEN_EXISTING);
             //rc = f_open(&fil, wfname, FA_WRITE | FA_OPEN_EXISTING);

@@ -277,7 +277,7 @@ void initBNO055() {
 
    // Select BNO055 system operation mode
    writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, OPRMode );
-  // delay(25);
+   delay(25);
 
 }
 
@@ -350,7 +350,7 @@ void accelgyroCalBNO055(float * dest1, float * dest2)
   // Return to config mode to write accelerometer biases in offset register
   // This offset register is only used while in fusion mode when accelerometer full-scale is +/- 4g
   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, CONFIGMODE );
-//  delay(25);
+  delay(25);
 
   //write biases to accelerometer offset registers ad 16 LSB/dps
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_LSB, (int16_t)accel_bias[0] & 0xFF);
@@ -421,7 +421,7 @@ void magCalBNO055(float * dest1)
   // Return to config mode to write mag biases in offset register
   // This offset register is only used while in fusion mode when magnetometer sensitivity is 16 LSB/microTesla
   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, CONFIGMODE );
-//  delay(25);
+  delay(25);
 
   //write biases to magnetometer offset registers as 16 LSB/microTesla
   writeByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_X_LSB, (int16_t)mag_bias[0] & 0xFF);
@@ -895,30 +895,30 @@ if(p_flag){
   Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P24_PIN)-biasP4);
 
 Serial.println(Pressure_buff_idx);
-Serial.println(TIMER_TS);
-      if(SerialDebug_analog) {
-      //  Serial.print("analog 1 in volts is: ");
-      //note the addition of the scaler and the reprinting of analog 1
-      //  Serial.println(Pressure_buff[Pressure_buff_idx-4]*scaler);
-        //   Serial.print("analog 1 is: ");
-        Serial.println(Pressure_buff[Pressure_buff_idx-4]);
-        //  Serial.print("analog 2 is: ");
-        Serial.println(Pressure_buff[Pressure_buff_idx-3]);
-        //  Serial.print("analog 3 is: ");
-        Serial.println(Pressure_buff[Pressure_buff_idx-2]);
-      //    Serial.print("analog 4 is: ");
-        Serial.println(Pressure_buff[Pressure_buff_idx-1]);
-      //  Serial.println(Pressure_buff_idx);
 
-    //    Serial.print("analog 5 is: ");
+      if(SerialDebug_analog) {
+        Serial.print("analog 1 in volts is: ");
+      //note the addition of the scaler and the reprinting of analog 1
+        Serial.println(Pressure_buff[Pressure_buff_idx-4]*scaler);
+           Serial.print("analog 1 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-4]);
+          Serial.print("analog 2 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-3]);
+          Serial.print("analog 3 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-2]);
+          Serial.print("analog 4 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-1]);
+        Serial.println(Pressure_buff_idx);
+
+        Serial.print("analog 5 is: ");
         Serial.println(Pressure_buff[Pressure_buff_idx-8]);
-    //      Serial.print("analog 6 is: ");
+          Serial.print("analog 6 is: ");
         Serial.println(Pressure_buff[Pressure_buff_idx-7]);
-      //    Serial.print("analog 7 is: ");
+          Serial.print("analog 7 is: ");
         Serial.println(Pressure_buff[Pressure_buff_idx-6]);
-      //    Serial.print("analog 8 is: ");
+          Serial.print("analog 8 is: ");
         Serial.println(Pressure_buff[Pressure_buff_idx-5]);
-      //  Serial.println(Pressure_buff_idx);
+        Serial.println(Pressure_buff_idx);
           }
         //  digitalWrite(myLed, !digitalRead(myLed));
           //delay(50);

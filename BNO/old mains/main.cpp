@@ -57,24 +57,17 @@ modified:11_29_16
 #include "clocks.h"
 
 
-#define NUMSAMPLES_BNO 600
-#define ACC_BUFFSIZE 6*NUMSAMPLES_BNO //* changed from 3 to 6 because there are 2 BNOs
-#define GYR_BUFFSIZE 6*NUMSAMPLES_BNO
-#define MAG_BUFFSIZE 6*NUMSAMPLES_BNO
+#define NUMSAMPLES_BNO 60
+#define ACC_BUFFSIZE 3*NUMSAMPLES_BNO
+#define GYR_BUFFSIZE 3*NUMSAMPLES_BNO
+#define MAG_BUFFSIZE 3*NUMSAMPLES_BNO
 
-//#define NUMSAMPLES_Pressure 1000 // Actual_number_of_samples_from_EACH_sensor we
+#define NUMSAMPLES_Pressure 2000 // Actual_number_of_samples_from_EACH_sensor we
                             // multiple the index and whatnot by the number of samples later
 //Storage buffer (4* because they are float 32 in size )
-// #define Pressure_BUFFSIZE NUMSAMPLES_Pressure*8 //want 100 from each of the 4 sensors or 50 from 8
-// #define BUFFSIZE 4*Pressure_BUFFSIZE //because its uint32 so its broken down into 4 uint8_ts
-// #define NUMSAMPLE_8Pressure NUMSAMPLES_Pressure*8 //needs the you since all 8 sensors are incrementing it
-// uint8_t buffer[BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
-#define Pressure_BUFFSIZE 100*4 //want 100 from each of the 4 sensors or 50 from 8
-float32_t Pressure_buff[Pressure_BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
-uint16_t Pressure_buff_idx = 0; //starts at zero index
-
+#define Pressure_BUFFSIZE NUMSAMPLES_Pressure*8 //want 100 from each of the 4 sensors or 50 from 8
 #define BUFFSIZE 4*Pressure_BUFFSIZE //because its uint32 so its broken down into 4 uint8_ts
-#define NUMSAMPLES 100*8 //needs the you since all four sensors are incrementing it
+#define NUMSAMPLE_8Pressure NUMSAMPLES_Pressure*8 //needs the you since all 8 sensors are incrementing it
 uint8_t buffer[BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
 
 
@@ -85,11 +78,11 @@ float32_t mag_raw_buff[MAG_BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
 float32_t acc_buff[ACC_BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
 float32_t gyr_buff[GYR_BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
 float32_t mag_buff[MAG_BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
-//float32_t Pressure_buff[Pressure_BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
+float32_t Pressure_buff[Pressure_BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
 uint16_t acc_buff_idx = 0;
 uint16_t gyr_buff_idx = 0;
 uint16_t mag_buff_idx = 0;
-//uint16_t Pressure_buff_idx = 0;
+uint16_t Pressure_buff_idx = 0;
 uint16_t uSD_counter = 0;
 
 
@@ -101,10 +94,10 @@ FIL fil;        /* File object */
 DIR dir;        /* Directory object */
 FILINFO fno;      /* File information object */
 UINT wr;
-FATFS *fs;
 
-#define BUFFSIZE_BNO 4*ACC_BUFFSIZE+4*GYR_BUFFSIZE+4*MAG_BUFFSIZE//+4*Pressure_BUFFSIZE
-uint8_t buffer_BNO[BUFFSIZE_BNO] __attribute__( ( aligned ( 16 ) ) );
+
+#define BUFFSIZE_big 4*ACC_BUFFSIZE+4*GYR_BUFFSIZE+4*MAG_BUFFSIZE+4*Pressure_BUFFSIZE
+uint8_t buffer_big[BUFFSIZE] __attribute__( ( aligned ( 16 ) ) );
 
 // ***** Sensor Sampling Stuff ***** //
 ADC *adc = new ADC(); // adc object
@@ -127,14 +120,14 @@ int biasP4=0;
 
 // Timer Control
 const float scale_timer = 16;
-const uint32_t TIMER_TS =   (uint32_t)(10000000/25.0/scale_timer);//200hz  // 150000 = 0.15s
+const uint32_t TIMER_TS =   (uint32_t)(10000000/250.0/scale_timer);//200hz  // 150000 = 0.15s
                                     //  1s/((X)/scale_timer)  where X= samples per sec    // Sampling Period in Microseconds
 
 // ISR Flags
 volatile bool a_flag = 0;
 volatile bool g_flag = 0;
 volatile bool m_flag = 0;
-volatile bool p_flag = true;
+volatile bool p_flag = 0;
 uint p_scaler =0;
 //===================================================================================================================
 //====== Set of useful function to access acceleration. gyroscope, magnetometer, and temperature data
@@ -277,7 +270,7 @@ void initBNO055() {
 
    // Select BNO055 system operation mode
    writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, OPRMode );
-  // delay(25);
+   delay(25);
 
 }
 
@@ -312,7 +305,7 @@ void accelgyroCalBNO055(float * dest1, float * dest2)
     accel_bias[0]  += (int32_t) accel_temp[0];
     accel_bias[1]  += (int32_t) accel_temp[1];
     accel_bias[2]  += (int32_t) accel_temp[2];
-  //*  delay(20);  // at 62.5 Hz ODR, new accel data is available every 16 ms
+    delay(20);  // at 62.5 Hz ODR, new accel data is available every 16 ms
    }
     accel_bias[0]  /= (int32_t) sample_count;  // get average accel bias in mg
     accel_bias[1]  /= (int32_t) sample_count;
@@ -337,7 +330,7 @@ void accelgyroCalBNO055(float * dest1, float * dest2)
     gyro_bias[0]  += (int32_t) gyro_temp[0];
     gyro_bias[1]  += (int32_t) gyro_temp[1];
     gyro_bias[2]  += (int32_t) gyro_temp[2];
-    //*delay(35);  // at 32 Hz ODR, new gyro data available every 31 ms
+    delay(35);  // at 32 Hz ODR, new gyro data available every 31 ms
    }
     gyro_bias[0]  /= (int32_t) sample_count;  // get average gyro bias in counts
     gyro_bias[1]  /= (int32_t) sample_count;
@@ -350,7 +343,7 @@ void accelgyroCalBNO055(float * dest1, float * dest2)
   // Return to config mode to write accelerometer biases in offset register
   // This offset register is only used while in fusion mode when accelerometer full-scale is +/- 4g
   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, CONFIGMODE );
-//  delay(25);
+  delay(25);
 
   //write biases to accelerometer offset registers ad 16 LSB/dps
   writeByte(BNO055_ADDRESS, BNO055_ACC_OFFSET_X_LSB, (int16_t)accel_bias[0] & 0xFF);
@@ -407,7 +400,7 @@ void magCalBNO055(float * dest1)
         if(mag_temp[jj] < mag_min[jj]) mag_min[jj] = mag_temp[jj];
       }
     }
-    //* delay(105);  // at 10 Hz ODR, new mag data is available every 100 ms
+    delay(105);  // at 10 Hz ODR, new mag data is available every 100 ms
    }
 
     mag_bias[0]  = (mag_max[0] + mag_min[0])/2;  // get average x mag bias in counts
@@ -421,7 +414,7 @@ void magCalBNO055(float * dest1)
   // Return to config mode to write mag biases in offset register
   // This offset register is only used while in fusion mode when magnetometer sensitivity is 16 LSB/microTesla
   writeByte(BNO055_ADDRESS, BNO055_OPR_MODE, CONFIGMODE );
-//  delay(25);
+  delay(25);
 
   //write biases to magnetometer offset registers as 16 LSB/microTesla
   writeByte(BNO055_ADDRESS, BNO055_MAG_OFFSET_X_LSB, (int16_t)mag_bias[0] & 0xFF);
@@ -588,17 +581,18 @@ void Madgwick(float ax, float ay, float az, float gx, float gy, float gz, float 
   //===================================================================================================================
 
 void TIMER_TS_ISR(void) {
-  digitalWrite(myLed, !digitalRead(myLed));
+//  digitalWrite(myLed, !digitalRead(myLed));
 
     a_flag = true;
     g_flag = true;
     m_flag = true;
     p_scaler = p_scaler+1;
 
-    if (p_scaler == 10){ // the pressure are sampled 1/10 th as often as the pressure sensors
-    //  digitalWrite(myLed, !digitalRead(myLed));
+    if (p_scaler == 10){ // the pressure are sampled 10 th as often as the pressure sensors
+
+      digitalWrite(myLed, !digitalRead(myLed));
         p_scaler=0;
-   p_flag = true;
+    p_flag = true;
   } else
   {
     p_flag=false;
@@ -617,11 +611,9 @@ void setup()
 if (Save_to_SD)
 {
   f_mount(&fatfs, (TCHAR*)_T("/"), 0); /* Mount/Unmount a logical drive sd*/
-  rc = f_open(&fil, (TCHAR*)_T("BNO_test.bin"), FA_WRITE | FA_CREATE_ALWAYS);
-  rc = f_close(&fil);
-
   rc = f_open(&fil, (TCHAR*)_T("Pressure_test.bin"), FA_WRITE | FA_CREATE_ALWAYS);
   rc = f_close(&fil);
+
 }
 
 
@@ -893,70 +885,60 @@ if(p_flag){
   Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P22_PIN)-biasP2);
   Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P23_PIN)-biasP3);
   Pressure_buff[Pressure_buff_idx++] = (float32_t)(adc->adc0->analogRead(P24_PIN)-biasP4);
-
 Serial.println(Pressure_buff_idx);
-Serial.println(TIMER_TS);
-      if(SerialDebug_analog) {
-      //  Serial.print("analog 1 in volts is: ");
-      //note the addition of the scaler and the reprinting of analog 1
-      //  Serial.println(Pressure_buff[Pressure_buff_idx-4]*scaler);
-        //   Serial.print("analog 1 is: ");
-        Serial.println(Pressure_buff[Pressure_buff_idx-4]);
-        //  Serial.print("analog 2 is: ");
-        Serial.println(Pressure_buff[Pressure_buff_idx-3]);
-        //  Serial.print("analog 3 is: ");
-        Serial.println(Pressure_buff[Pressure_buff_idx-2]);
-      //    Serial.print("analog 4 is: ");
-        Serial.println(Pressure_buff[Pressure_buff_idx-1]);
-      //  Serial.println(Pressure_buff_idx);
 
-    //    Serial.print("analog 5 is: ");
+      if(SerialDebug_analog) {
+        Serial.print("analog 1 in volts is: ");
+      //note the addition of the scaler and the reprinting of analog 1
+        Serial.println(Pressure_buff[Pressure_buff_idx-4]*scaler);
+           Serial.print("analog 1 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-4]);
+          Serial.print("analog 2 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-3]);
+          Serial.print("analog 3 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-2]);
+          Serial.print("analog 4 is: ");
+        Serial.println(Pressure_buff[Pressure_buff_idx-1]);
+        Serial.println(Pressure_buff_idx);
+
+        Serial.print("analog 5 is: ");
         Serial.println(Pressure_buff[Pressure_buff_idx-8]);
-    //      Serial.print("analog 6 is: ");
+          Serial.print("analog 6 is: ");
         Serial.println(Pressure_buff[Pressure_buff_idx-7]);
-      //    Serial.print("analog 7 is: ");
+          Serial.print("analog 7 is: ");
         Serial.println(Pressure_buff[Pressure_buff_idx-6]);
-      //    Serial.print("analog 8 is: ");
+          Serial.print("analog 8 is: ");
         Serial.println(Pressure_buff[Pressure_buff_idx-5]);
-      //  Serial.println(Pressure_buff_idx);
-          }
-        //  digitalWrite(myLed, !digitalRead(myLed));
-          //delay(50);
+        Serial.println(Pressure_buff_idx);
+          }// delay(550);
 }
 //===================================================================================================================
 //====== /*store the data to the SD card if the timer is up*/
 //===================================================================================================================
 
-  if (acc_buff_idx == 60) {
-
+        if (Pressure_buff_idx%NUMSAMPLE_8Pressure == 0) {
               acc_buff_idx = 0;
               gyr_buff_idx = 0;
               mag_buff_idx = 0;
-
-
-          if (Save_to_SD){
-             rc = f_open(&fil, (TCHAR*)_T("BNO_test.bin"), FA_WRITE | FA_OPEN_EXISTING);
+            //  Pressure_buff_idx = 0;
+            //  rc = f_open(&fil, (TCHAR*)_T("BNO_test.bin"), FA_WRITE | FA_OPEN_EXISTING);
+            // //rc = f_open(&fil, wfname, FA_WRITE | FA_OPEN_EXISTING);
+            // rc = f_lseek(&fil, f_size(&fil));
+            //
+            // memcpy(buffer, (uint8_t*)acc_buff, 4*ACC_BUFFSIZE);
+            // memcpy(buffer+4*ACC_BUFFSIZE, (uint8_t*)gyr_buff, 4*GYR_BUFFSIZE);
+            // memcpy(buffer+4*ACC_BUFFSIZE+4*GYR_BUFFSIZE, (uint8_t*)mag_buff, 4*MAG_BUFFSIZE);
+            // memcpy(buffer+4*ACC_BUFFSIZE+4*GYR_BUFFSIZE, (uint8_t*)Pressure_buff, 4*Pressure_BUFFSIZE);
+            // rc = f_write(&fil, buffer, BUFFSIZE, &wr);
+            // rc = f_close(&fil);
+if (Save_to_SD){
+            Pressure_buff_idx=0;
+            rc = f_open(&fil, (TCHAR*)_T("Pressure_test.bin"), FA_WRITE | FA_OPEN_EXISTING);
             //rc = f_open(&fil, wfname, FA_WRITE | FA_OPEN_EXISTING);
             rc = f_lseek(&fil, f_size(&fil));
-
-            memcpy(buffer_BNO, (uint8_t*)acc_buff, 4*ACC_BUFFSIZE);
-            memcpy(buffer_BNO+4*ACC_BUFFSIZE, (uint8_t*)gyr_buff, 4*GYR_BUFFSIZE);
-            memcpy(buffer_BNO+4*ACC_BUFFSIZE+4*GYR_BUFFSIZE, (uint8_t*)mag_buff, 4*MAG_BUFFSIZE);
-          //  memcpy(buffer+4*ACC_BUFFSIZE+4*GYR_BUFFSIZE, (uint8_t*)Pressure_buff, 4*Pressure_BUFFSIZE);
-            rc = f_write(&fil, buffer_BNO, BUFFSIZE_BNO, &wr);
+            memcpy(buffer, (uint8_t*)Pressure_buff, 4*Pressure_BUFFSIZE);
+            rc = f_write(&fil, buffer, BUFFSIZE, &wr);
             rc = f_close(&fil);
-          }//ends if save to sd card
-}//ends saving BNO data
-
-if (Pressure_buff_idx == 400) {
-if (Save_to_SD){
-  Pressure_buff_idx=0;
-  rc = f_open(&fil, (TCHAR*)_T("Pressure_test.bin"), FA_WRITE | FA_OPEN_EXISTING);
-  //rc = f_open(&fil, wfname, FA_WRITE | FA_OPEN_EXISTING);
-  rc = f_lseek(&fil, f_size(&fil));
-  memcpy(buffer, (uint8_t*)Pressure_buff, 4*Pressure_BUFFSIZE);
-  rc = f_write(&fil, buffer, BUFFSIZE, &wr);
-  rc = f_close(&fil);
             }
         }
 
